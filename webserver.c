@@ -99,20 +99,34 @@ int run_webserver(void) {
         "<!doctype html>"
         "<html><head><meta charset=\"UTF-8\"><title>Chessboard</title>"
         "<style>"
-        "body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;margin:24px;}"
-        ".board{display:grid;grid-template-columns:repeat(8,60px);grid-template-rows:repeat(8,60px);border:2px solid #222;}"
-        ".square{width:60px;height:60px;background-size:cover;}"
-        ".white{background-image:url('/white_square.png');}"
-        ".black{background-image:url('/black_square.png');}"
+        "body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;margin:24px;background:#f5f5f5;}"
+        ".board{display:grid;grid-template-columns:repeat(8,64px);grid-template-rows:repeat(8,64px);border:2px solid #222;}"
+        ".square{width:64px;height:64px;background-size:cover;position:relative;}"
+        ".white{background-image:url('/textures/white_square.png');}"
+        ".black{background-image:url('/textures/black_square.png');}"
+        ".piece{width:56px;height:56px;position:absolute;left:4px;top:4px;user-select:none;pointer-events:none;}"
+        ".palette{display:flex;flex-wrap:wrap;gap:8px;max-width:560px;justify-content:center;margin:0 0 16px 0;}"
+        ".palette button{border:2px solid transparent;border-radius:8px;padding:4px;background:#fff;cursor:pointer;}"
+        ".palette button.active{border-color:#2563eb;background:#dbeafe;}"
+        ".palette img{width:42px;height:42px;display:block;}"
+        ".help{margin:8px 0 16px 0;color:#333;}"
         "</style></head>"
-        "<body><h1>Simple Chess Board</h1><div id=\"board\" class=\"board\"></div>"
+        "<body><h1>Simple Chess Board</h1>"
+        "<div id=\"palette\" class=\"palette\"></div>"
+        "<div class=\"help\">Select a piece, then click a square to place it. Right-click a square to clear it.</div>"
+        "<div id=\"board\" class=\"board\"></div>"
         "<script>"
+        "const pieces=[['wK','/textures/white_king.png'],['wQ','/textures/white_queen.png'],['wR','/textures/white_rook.png'],['wB','/textures/white_bishop.png'],['wN','/textures/white_knight.png'],['wP','/textures/white_pawn.png'],['bK','/textures/black_king.png'],['bQ','/textures/black_queen.png'],['bR','/textures/black_rook.png'],['bB','/textures/black_bishop.png'],['bN','/textures/black_knight.png'],['bP','/textures/black_pawn.png']];"
+        "const pieceMap=Object.fromEntries(pieces);"
+        "const boardState=[['bR','bN','bB','bQ','bK','bB','bN','bR'],['bP','bP','bP','bP','bP','bP','bP','bP'],[null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null],['wP','wP','wP','wP','wP','wP','wP','wP'],['wR','wN','wB','wQ','wK','wB','wN','wR']];"
+        "let selectedPiece='wP';"
+        "const palette=document.getElementById('palette');"
+        "function renderPalette(){palette.innerHTML='';pieces.forEach(([code,src])=>{const b=document.createElement('button');if(code===selectedPiece)b.className='active';b.title=code;b.innerHTML='<img alt=\"'+code+'\" src=\"'+src+'\">';b.onclick=()=>{selectedPiece=code;renderPalette();};palette.appendChild(b);});}"
         "const board=document.getElementById('board');"
-        "for(let r=0;r<8;r++){for(let c=0;c<8;c++){"
-        "const s=document.createElement('div');"
-        "s.className='square '+(((r+c)%2===0)?'white':'black');"
-        "board.appendChild(s);"
-        "}}"
+        "for(let r=0;r<8;r++){for(let c=0;c<8;c++){const s=document.createElement('div');s.className='square '+(((r+c)%2===0)?'white':'black');s.dataset.r=r;s.dataset.c=c;s.addEventListener('click',()=>{boardState[r][c]=selectedPiece;paintSquare(s,boardState[r][c]);});s.addEventListener('contextmenu',(e)=>{e.preventDefault();boardState[r][c]=null;paintSquare(s,null);});board.appendChild(s);}}"
+        "function paintSquare(square,pieceCode){square.innerHTML='';if(!pieceCode)return;const img=document.createElement('img');img.className='piece';img.alt=pieceCode;img.src=pieceMap[pieceCode];square.appendChild(img);}"
+        "function paintBoard(){const squares=board.children;let i=0;for(let r=0;r<8;r++){for(let c=0;c<8;c++){paintSquare(squares[i++],boardState[r][c]);}}}"
+        "renderPalette();paintBoard();"
         "</script></body></html>";
     const char *not_found = "404 Not Found";
     char request[2048];
@@ -180,10 +194,10 @@ int run_webserver(void) {
                 (const unsigned char *) html,
                 strlen(html)
             );
-        } else if (strcmp(path, "/white_square.png") == 0 || strcmp(path, "/black_square.png") == 0) {
+        } else if (strncmp(path, "/textures/", 10) == 0 && strstr(path, "..") == NULL) {
             unsigned char *image_data = NULL;
             size_t image_len = 0;
-            const char *file_name = (path[1] == 'w') ? "white_square.png" : "black_square.png";
+            const char *file_name = path + 1;
 
             if (load_file_with_fallback(file_name, &image_data, &image_len)) {
                 send_response(client_socket, "HTTP/1.1 200 OK", "image/png", image_data, image_len);
@@ -191,10 +205,10 @@ int run_webserver(void) {
             } else {
                 send_response(
                     client_socket,
-                    "HTTP/1.1 500 Internal Server Error",
+                    "HTTP/1.1 404 Not Found",
                     "text/plain; charset=UTF-8",
-                    (const unsigned char *) "PNG file missing",
-                    strlen("PNG file missing")
+                    (const unsigned char *) not_found,
+                    strlen(not_found)
                 );
             }
         } else {
